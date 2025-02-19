@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: microservices_db
+    ports:
+      - "3307:3306"  # Change to avoid conflicts with XAMPP MySQL
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  user_service:
+    build: 
+      context: ./user_service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: microservices_db
+    volumes:
+      - ./user_service/deps:/app/deps  # MOUNTING deps FOLDER
+
+  order_service:
+    build: 
+      context: ./order_service
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    depends_on:
+      db:
+        condition: service_healthy
+      user_service:
+        condition: service_started
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: microservices_db
+    volumes:
+      - ./order_service/deps:/app/deps  # MOUNTING deps FOLDER
+
+volumes:
+  mysql_data:
