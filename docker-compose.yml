@@ -8,7 +8,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: microservices_db
     ports:
-      - "3307:3306"  # Change to avoid conflicts with XAMPP MySQL
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -17,9 +17,7 @@ services:
       retries: 10
 
   user_service:
-    build: 
-      context: ./user_service
-      dockerfile: Dockerfile
+    build: ./user_service
     ports:
       - "5001:5001"
     depends_on:
@@ -31,12 +29,10 @@ services:
       DB_PASSWORD: root
       DB_NAME: microservices_db
     volumes:
-      - ./user_service/deps:/app/deps  # MOUNTING deps FOLDER
+      - ./user_service:/app
 
   order_service:
-    build: 
-      context: ./order_service
-      dockerfile: Dockerfile
+    build: ./order_service
     ports:
       - "5002:5002"
     depends_on:
@@ -49,8 +45,9 @@ services:
       DB_USER: root
       DB_PASSWORD: root
       DB_NAME: microservices_db
+      USER_SERVICE_URL: "http://user_service:5001"
     volumes:
-      - ./order_service/deps:/app/deps  # MOUNTING deps FOLDER
+      - ./order_service:/app
 
 volumes:
   mysql_data:

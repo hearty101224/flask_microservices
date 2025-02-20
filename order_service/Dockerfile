@@ -1,11 +1,17 @@
+# Use an official Python image
 FROM python:3.9
 
+# Set the working directory
 WORKDIR /app
 
+# Copy the application files
 COPY . /app
-COPY deps /app/deps
 
-RUN ls -lh /app/deps  # Debugging
-RUN pip install --find-links=/app/deps importlib-metadata zipp flask flask-mysql flask-restful mysql-connector-python requests
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "order_service.py"]
+# Expose the port
+EXPOSE 5002
+
+# Run the application
+CMD ["python", "app.py"]

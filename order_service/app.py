@@ -1,49 +1,55 @@
 from flask import Flask, request, jsonify
-import mysql.connector
-import requests
-import os
+from flask_sqlalchemy import SQLAlchemy
+import os, requests
 
 app = Flask(__name__)
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://user_service:5001")
 
-def get_db_connection():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "db"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", "root"),
-        database=os.getenv("DB_NAME", "microservices_db")
-    )
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{os.getenv('DB_USER', 'root')}:{os.getenv('DB_PASSWORD', 'root')}@{os.getenv('DB_HOST', 'db')}/{os.getenv('DB_NAME', 'microservices_db')}"
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Place Order
-@app.route('/order', methods=['POST'])
+db = SQLAlchemy(app)
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    product_name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+
+@app.route('/orders', methods=['POST'])
 def place_order():
     data = request.json
-    # Check if user exists (calling User Service API)
-    user_response = requests.get('http://user_service:5001/users')  
-    users = user_response.json()
-    user_ids = [user[0] for user in users]
+    if not all([data.get("user_id"), data.get("product"), data.get("quantity")]):
+        return jsonify({"error": "Missing required fields"}), 400
 
-    if data['user_id'] not in user_ids:
+    user_response = requests.get(f"{USER_SERVICE_URL}/users")
+    if user_response.status_code != 200:
+        return jsonify({"error": "User service unavailable"}), 500
+
+    users = user_response.json()
+    if not any(u["id"] == data["user_id"] for u in users):
         return jsonify({"error": "User not found"}), 404
 
-    db = get_db_connection()
-    cursor = db.cursor()
-    cursor.execute("INSERT INTO orders (user_id, product_name, quantity) VALUES (%s, %s, %s)",
-                   (data['user_id'], data['product_name'], data['quantity']))
-    db.commit()
-    cursor.close()
-    db.close()
-    return jsonify({"message": "Order placed successfully"}), 201
+    new_order = Order(user_id=data["user_id"], product_name=data["product"], quantity=data["quantity"])
+    db.session.add(new_order)
+    db.session.commit()
 
-# Get Orders
+    return jsonify({"message": "Order placed successfully", "order_id": new_order.id}), 201
+
+
 @app.route('/orders', methods=['GET'])
 def get_orders():
-    db = get_db_connection()
-    cursor = db.cursor()
-    cursor.execute("SELECT * FROM orders")
-    orders = cursor.fetchall()
-    cursor.close()
-    db.close()
-    return jsonify(orders)
+    orders = Order.query.all()
+    return jsonify([{
+        "id": order.id,
+        "user_id": order.user_id,
+        "product_name": order.product_name,
+        "quantity": order.quantity
+    } for order in orders])
+
 
 if __name__ == '__main__':
+    with app.app_context():  # ✅ Ensure create_all runs inside context
+        db.create_all()
     app.run(host='0.0.0.0', port=5002, debug=True)
